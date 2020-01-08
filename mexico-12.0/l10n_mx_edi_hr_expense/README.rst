@@ -185,20 +185,13 @@ Extra Features:
 Exceptions supported:
 ---------------------
 
-- The expense is deductible but not have a CFDI
-  (CFE or foreign supplier for example).
+- The expense is deductible but not have a CFDI (CFE for example).
 
   In this case, is necessary adds the category `Force Invoice Generation` in
   the partners with this case, and generate a normal expense.
 
   For this, will be generated a supplier invoice in draft with the
   expense data.
-
-  Note:
-
-  If the expense is a credit note. Generate a normal expense specifying
-  that the type of document is a Credit Note. This will generate a
-  Draft Supplier Credit Note with the expense data.
 
 - Is necessary edit the invoice created from an expense.
 

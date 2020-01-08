@@ -571,13 +571,12 @@ class HrExpense(models.Model):
         partner = self.env['res.partner']
         for expense in self.filtered('l10n_mx_edi_rfc'):
             element = json.loads(expense.l10n_mx_edi_analysis)
-            domain = [('vat', '=', expense.l10n_mx_edi_rfc),
-                      ('is_company', '=', True),
-                      ('supplier', '=', True)]
-            partner = expense._get_expense_partner(domain)
+            partner = partner.sudo().search(
+                [('vat', '=', expense.l10n_mx_edi_rfc),
+                 ('is_company', '=', True)], limit=1)
             if not partner:
-                domain.pop()
-                partner = expense._get_expense_partner(domain)
+                partner = partner.sudo().search(
+                    [('vat', '=', expense.l10n_mx_edi_rfc)], limit=1)
             if not partner:
                 partner = partner.create({
                     'vat': expense.l10n_mx_edi_rfc,
@@ -593,29 +592,19 @@ class HrExpense(models.Model):
 
     @api.depends('l10n_mx_edi_rfc')
     def _compute_partner_id(self):
+        partner = self.env['res.partner'].sudo()
         for expense in self.filtered('l10n_mx_edi_rfc'):
             # TODO; do a more complex logic, i.e.: instead take the first
             #  take the one with more invoices ore something like that.
-            domain = [
-                ('vat', '=', expense.l10n_mx_edi_rfc),
-                ('vat', '!=', False),
-                ('is_company', '=', True),
-                ('supplier', '=', True)]
-            exp_partner = self._get_expense_partner(domain)
-            if not exp_partner:
-                domain.pop()
-                exp_partner = self._get_expense_partner(domain)
-            expense.partner_id = exp_partner
-
-    @api.multi
-    def _get_expense_partner(self, domain):
-        partner = self.env['res.partner'].sudo()
-        expense_partner = partner.search(domain, limit=1)
-        if not expense_partner:
-            my_domain = domain.copy()
-            my_domain.pop()
-            expense_partner = partner.search(my_domain, limit=1)
-        return expense_partner
+            expense_partner = partner.search(
+                [('vat', '=', expense.l10n_mx_edi_rfc),
+                 ('is_company', '=', True),
+                 ('vat', '!=', False)], limit=1)
+            if not expense_partner:
+                expense_partner = partner.search(
+                    [('vat', '=', expense.l10n_mx_edi_rfc),
+                     ('vat', '!=', False)], limit=1)
+            expense.partner_id = expense_partner
 
     @api.multi
     def _inverse_state(self):
@@ -1035,10 +1024,6 @@ special cases to work with:
                 'l10n_mx_edi_document_type': dict_document_type.get(
                     document_type, False),
             })
-            if not expense.company_id:
-                company = self.env['res.company'].search([
-                    ('vat', '=', invoice.Receptor.get('Rfc', ' '))], limit=1)
-                expense.company_id = company.id
             expense.l10n_mx_edi_update_sat_status()
             # TODO: Document better? this is a design decision, If partner do
             #  not exists and he/she is sending a valid CFID this should be
@@ -1636,12 +1621,8 @@ special cases to work with:
             journal = exp.employee_id.journal_id\
                 if exp.payment_mode == 'own_account' else petty_cash
             payment_method = journal.outbound_payment_method_ids
-            period_lock_date = invoice.company_id.period_lock_date
-            payment_date = invoice.date_invoice
-            if (period_lock_date and invoice.date_invoice <= period_lock_date):
-                payment_date = invoice.date
-            payment.with_context(ctx).create({
-                'payment_date': payment_date,
+            payment.with_context(ctx).sudo().create({
+                'payment_date': invoice.date_invoice,
                 'payment_method_id': payment_method[
                     0].id if payment_method else False,
                 'journal_id': journal.id,
@@ -2088,9 +2069,8 @@ special cases to work with:
         """Create an invoice without CFDI for the partners with the tag
         tag_force_invoice_generation"""
         invoice = self.env['account.invoice']
+        journal = invoice.with_context(type='in_invoice')._default_journal()
         for expense in self:
-            inv_type = expense.l10n_mx_edi_document_type or 'in_invoice'
-            journal = invoice.with_context(type=inv_type)._default_journal()
             product = expense.product_id
             account = product.product_tmpl_id.get_product_accounts()[
                 'expense'].id
@@ -2112,7 +2092,7 @@ special cases to work with:
                 'date': expense.date,
                 'currency_id': expense.currency_id.id,
                 'invoice_line_ids': invoice_line_ids,
-                'type': inv_type,
+                'type': 'in_invoice',
                 'journal_id': journal.id,
             }
             inv = invoice.create(data)
@@ -2165,22 +2145,3 @@ special cases to work with:
         if not journal:
             return res
         return journal.default_credit_account_id.id
-
-    @api.multi
-    def _reclassify_journal_entries(
-            self, account_id=None, product_id=None, date=None):
-        """Reclassify data in the expense"""
-        for exp in self:
-            exp.account_id = account_id if account_id else exp.account_id
-            exp.product_id = product_id if product_id else exp.product_id
-            exp.date = date if date else exp.date
-            if not exp.l10n_mx_edi_move_line_id:
-                continue
-            line = exp.l10n_mx_edi_move_line_id
-            state = line.move_id.state
-            if state == 'posted':
-                line.move_id.button_cancel()
-            line.account_id = account_id if account_id else line.account_id
-            line.date = date if date else line.date
-            if state == 'posted':
-                line.move_id.action_post()

@@ -36,15 +36,45 @@ class L10nMxEdiReclassifyJournalEntries(models.TransientModel):
         if model == 'hr.expense.sheet':
             records = self.env[model].browse(records).mapped(
                 'expense_line_ids').ids
-            model = 'hr.expense'
-        records = self.env[model].browse(records)
-        records._reclassify_journal_entries(
-            self.account_id, self.product_id, self.date)
-        if model == 'hr.expense':
-            records.mapped(
-                'l10n_mx_edi_invoice_id')._reclassify_journal_entries(
-                    self.account_id, self.product_id, self.date)
+        if model in ['hr.expense', 'hr.expense.sheet']:
+            for exp in self.env['hr.expense'].browse(records):
+                exp.account_id = self.account_id if \
+                    self.account_id else exp.account_id
+                exp.product_id = self.product_id if \
+                    self.product_id else exp.product_id
+                exp.date = self.date if self.date else exp.date
+                if not exp.l10n_mx_edi_move_line_id:
+                    continue
+                line = exp.l10n_mx_edi_move_line_id
+                state = line.move_id.state
+                if state == 'posted':
+                    line.move_id.button_cancel()
+                line.account_id = self.account_id if \
+                    self.account_id else line.account_id
+                line.date = self.date if self.date else line.date
+                if state == 'posted':
+                    line.move_id.action_post()
         elif model == 'account.invoice':
-            records.mapped(
-                'l10n_mx_edi_expense_id')._reclassify_journal_entries(
-                    self.account_id, self.product_id, self.date)
+            for inv in self.env['account.invoice'].browse(records):
+                inv.date = self.date if self.date else inv.date
+                for line in inv.invoice_line_ids:
+                    line.account_id = self.account_id if \
+                        self.account_id else line.account_id
+                    line.product_id = self.product_id if \
+                        self.product_id else line.product_id
+                if not inv.move_id:
+                    continue
+                state = inv.move_id.state
+                if state == 'posted':
+                    inv.move_id.button_cancel()
+                inv.move_id.date = self.date if self.date else inv.move_id.date
+                tax_accounts = inv.tax_line_ids.mapped('account_id')
+                lines = inv.move_id.line_ids.filtered(
+                    lambda l: l.account_id.user_type_id.type != 'payable' and
+                    l.account_id not in tax_accounts)
+                for line in lines:
+                    line.account_id = self.account_id if \
+                        self.account_id else line.account_id
+                    line.date = self.date if self.date else line.date
+                if state == 'posted':
+                    inv.move_id.action_post()

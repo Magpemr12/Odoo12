@@ -241,8 +241,6 @@ class EdiHrExpense(TransactionCase):
     def test_expense_state(self):
         """Generate an expense with CFDI, and pay the invoice, after
         unreconcile the payment"""
-        self.env.ref(
-            'base.main_company').tax_cash_basis_journal_id.update_posted = True
         expense = self.env.ref('l10n_mx_edi_hr_expense.ciel')
         expense.check_fiscal_status()
         expense.write({

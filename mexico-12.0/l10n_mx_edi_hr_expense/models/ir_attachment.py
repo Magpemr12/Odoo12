@@ -5,7 +5,7 @@ import base64
 import logging
 from io import BytesIO
 
-from lxml import etree, objectify
+from lxml import objectify
 from odoo import api, models
 from odoo.tools.xml_utils import _check_with_xsd
 from odoo.exceptions import UserError
@@ -35,7 +35,7 @@ class IrAttachment(models.Model):
         try:
             datas = base64.b64decode(self.datas).replace(
                 b'xmlns:schemaLocation', b'xsi:schemaLocation')
-            xml = objectify.fromstring(datas)
+            objectify.fromstring(datas)
         except (SyntaxError, ValueError):
             return False
 
@@ -43,19 +43,13 @@ class IrAttachment(models.Model):
         schema = base64.b64decode(attachment.datas) if attachment else b''
         xml = datas or b''
         try:
-            xml = objectify.fromstring(xml)
-            if xml.get('Version') != '3.3':
+            if objectify.fromstring(xml).get('Version') != '3.3':
                 return False
-            if hasattr(xml, 'Addenda'):
-                xml.remove(xml.Addenda)
             with BytesIO(schema) as xsd:
-                _check_with_xsd(etree.tostring(
-                    xml, pretty_print=True, xml_declaration=True,
-                    encoding='UTF-8'), xsd)
-            cfdi = self.env['account.invoice'].l10n_mx_edi_get_tfd_etree(xml)
-            uuid = cfdi.get('UUID') if cfdi is not None else False
-            return uuid
-        except (ValueError, IOError):
+                _check_with_xsd(xml, xsd)
+        except ValueError:
+            return False
+        except IOError:
             return False
         except UserError as e:
 
