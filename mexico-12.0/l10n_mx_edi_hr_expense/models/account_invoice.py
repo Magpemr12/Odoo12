@@ -69,3 +69,28 @@ class AccountInvoice(models.Model):
             'target': 'current',
             'res_id': expense.id
         }
+
+    @api.multi
+    def _reclassify_journal_entries(
+            self, account_id=None, product_id=None, date=None):
+        """Reclassify data in the invoice"""
+        for inv in self:
+            inv.date = date if date else inv.date
+            for line in inv.invoice_line_ids:
+                line.account_id = account_id if account_id else line.account_id
+                line.product_id = product_id if product_id else line.product_id
+            if not inv.move_id:
+                continue
+            state = inv.move_id.state
+            if state == 'posted':
+                inv.move_id.button_cancel()
+            inv.move_id.date = date if date else inv.move_id.date
+            tax_accounts = inv.tax_line_ids.mapped('account_id')
+            lines = inv.move_id.line_ids.filtered(
+                lambda l: l.account_id.user_type_id.type != 'payable' and
+                l.account_id not in tax_accounts)
+            for line in lines:
+                line.account_id = account_id if account_id else line.account_id
+                line.date = date if date else line.date
+            if state == 'posted':
+                inv.move_id.action_post()
