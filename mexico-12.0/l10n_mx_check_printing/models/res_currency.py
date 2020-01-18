@@ -37,11 +37,11 @@ class ResCurrency(models.Model):
             context = self._context
             params = context.get('params') if 'params' in context else False
             if params and 'model' in params and params.get('model') == 'account.payment' and \
-            'lang' in context and context.get('lang') == 'es_MX':
+            'lang' in context and (context.get('lang') == 'es_MX' or context.get('lang') == 'es_ES'):
             	amount_in_word = amount_words + ' ' + str(fractional_value) + '/100' + ' MN'
             	amount_words = amount_in_word
             elif 'active_model' in context and context.get('active_model') == 'account.payment' \
-            and 'lang' in context and context.get('lang') == 'es_MX':
+            and 'lang' in context and (context.get('lang') == 'es_MX' or context.get('lang') == 'es_ES'):
                 amount_in_word = amount_words + ' ' + str(fractional_value) + '/100' + ' MN'
                 amount_words = amount_in_word
             else:
