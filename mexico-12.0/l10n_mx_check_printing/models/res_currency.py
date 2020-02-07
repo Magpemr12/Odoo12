@@ -33,6 +33,10 @@ class ResCurrency(models.Model):
                         amt_value=_num2words(integer_value, lang=lang.iso_code),
                         amt_word=self.currency_unit_label,
                         )
+
+        if fractional_value == 0:
+            amount_words += ' 00/100 M.N.'
+
         if not self.is_zero(amount - integer_value):
             context = self._context
             params = context.get('params') if 'params' in context else False
